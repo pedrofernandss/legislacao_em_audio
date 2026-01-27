@@ -1,5 +1,8 @@
 import re
 
+def lowercase_text(original_text: str):
+    return original_text.lower()
+
 def replace_legal_terms(original_text: str):
 
     legal_patterns = [
