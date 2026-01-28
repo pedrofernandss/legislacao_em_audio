@@ -36,6 +36,9 @@ class CleanText:
         for pattern, subs in legal_patterns:
             expanded_text = re.sub(pattern, subs, expanded_text)
 
+        ordinal_pattern = r'(artigo|parágrafo)\s([1-9])[º°]'
+        expanded_text = re.sub(ordinal_pattern, self._replace_ordinals, expanded_text, flags=re.IGNORECASE)
+
         return expanded_text
 
     def remove_markdown_artifacts(self, text: str) -> str:
