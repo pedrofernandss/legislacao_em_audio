@@ -1,42 +1,57 @@
 import re
 
-def lowercase_text(original_text: str) -> str:
-    return original_text.lower()
+class CleanText:
+    def __init__(self):
 
-def replace_legal_terms(original_text: str) -> str:
+        self.ordinal_map = {
+            "1" : "primeiro", "2": "segundo", "3": "terceiro",
+            "4": "quarto", "5": "quinto", "6": "sexto",
+            "7": "sétimo", "8": "oitavo", "9": "nono"
+        }
 
-    legal_patterns = [
-        (r'(?i)(?<!\w)par\.?\s*?ún(?:ico)?\.?', 'parágrafo único'),
-        (r'§§', 'parágrafos'),
+    def _replace_ordinals(self, match):
+        prefix = match.group(1)
+        number = match.group(2)
 
-        (r'§', 'parágrafo'),
-        (r'(?i)(?<!\w)art\.?', 'artigo'),
-        (r'(?i)(?<!\w)inc\.?', 'inciso'),
-        (r'(?i)(?<!\w)al\.?', 'alínea'),
-        (r'(?i)(?<!\w)caput', 'caput'),
-        (r'(?i)(?<!\w)n[º°.]', 'número'),
+        if number in self.ordinal_map:
+            return f"{prefix} {self.ordinal_map[number]}"
+        return f"{prefix} {number}"
 
-        (r'(?m)^(\s*)([a-z])\)', r'\1alínea \2)')
-    ]
+    def expand_legal_terms(self, text: str) -> str:
 
-    normalized_text = original_text
+        legal_patterns = [
+            (r'(?i)(?<!\w)par\.?\s*?ún(?:ico)?\.?', 'parágrafo único'),
+            (r'§§', 'parágrafos'),
+            (r'§', 'parágrafo'),
+            (r'(?i)(?<!\w)art\.?', 'artigo'),
+            (r'(?i)(?<!\w)inc\.?', 'inciso'),
+            (r'(?i)(?<!\w)al\.?', 'alínea'),
+            (r'(?i)(?<!\w)caput', 'caput'),
+            (r'(?i)(?<!\w)n[º°.]', 'número'),
+            (r'(?m)^(\s*)([a-z])\)', r'\1alínea \2)')
+        ]
 
-    for pattern, subs in legal_patterns:
-        normalized_text = re.sub(pattern, subs, normalized_text)
+        expanded_text = text
 
-    return normalized_text
+        for pattern, subs in legal_patterns:
+            expanded_text = re.sub(pattern, subs, expanded_text)
 
-def remove_special_char(original_text:str) -> str:
+        return expanded_text
 
-    characteres_to_remove = [
+    def remove_markdown_artifacts(self, text: str) -> str:
+        patterns = [
+            (r'\[([^\]]+)\]\([^\)]+\)', r'\1'),
+            (r'[*_#>{}]', '')
+        ]
 
-        (r'\[([^\]]+)\]\([^\)]+\)', r'\1'),
-        (r'[*_#>{}]', '')
-    ]
+        clean = text
+        for pat, sub in patterns:
+            clean = re.sub(pat, sub, clean)
 
-    clean_text = original_text
+        return clean.strip()
 
-    for char, subs in characteres_to_remove:
-        clean_text = re.sub(char, subs, clean_text)
+    def clean(self, text: str) -> str:
+        text = self.remove_markdown_artifacts(text)
+        text = self.expand_legal_terms(text)
 
-    return clean_text
+        return text
