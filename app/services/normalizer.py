@@ -1,9 +1,9 @@
 import re
 
-def lowercase_text(original_text: str):
+def lowercase_text(original_text: str) -> str:
     return original_text.lower()
 
-def replace_legal_terms(original_text: str):
+def replace_legal_terms(original_text: str) -> str:
 
     legal_patterns = [
         (r'(?i)(?<!\w)par\.?\s*?ún(?:ico)?\.?', 'parágrafo único'),
@@ -25,3 +25,18 @@ def replace_legal_terms(original_text: str):
         normalized_text = re.sub(pattern, subs, normalized_text)
 
     return normalized_text
+
+def remove_special_char(original_text:str) -> str:
+
+    characteres_to_remove = [
+
+        (r'\[([^\]]+)\]\([^\)]+\)', r'\1'),
+        (r'[*_#>{}]', '')
+    ]
+
+    clean_text = original_text
+
+    for char, subs in characteres_to_remove:
+        clean_text = re.sub(char, subs, clean_text)
+
+    return clean_text
