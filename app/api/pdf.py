@@ -3,10 +3,10 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, UploadFile, File
-from app.services.pdf_processor import PDFProcessor
+from services.file_converter import FileConverter
 
 legislation_router = APIRouter()
-processor = PDFProcessor()
+processor = FileConverter()
 
 @legislation_router.post("/convert")
 async def convert_pdf(file: UploadFile = File(...)):
@@ -17,7 +17,7 @@ async def convert_pdf(file: UploadFile = File(...)):
     with temp_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    markdown_text = processor.to_markdown(str(temp_path))
+    markdown_text = processor.pdf_to_markdown(str(temp_path))
 
     temp_path.unlink()
 
