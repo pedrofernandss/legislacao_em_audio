@@ -24,8 +24,9 @@ class DocumentProcessingPipeline:
     def _build_segments(self, cleaned_text: str) -> list[tuple[str | None, str]]:
         chapters = self.cleaner.split_text_by_chapters(cleaned_text)
         if chapters:
-            return list(chapters.items())
-        return [(None, chunk) for chunk in self.cleaner.chunk_text(cleaned_text)]
+            return chapters
+        speakable_text = self.cleaner.expand_chapter_headings_for_speech(cleaned_text)
+        return [(None, chunk) for chunk in self.cleaner.chunk_text(speakable_text)]
 
     def process(
         self,

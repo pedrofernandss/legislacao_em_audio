@@ -15,6 +15,12 @@ ORDINAL_TENS_PT = {
     80: "octogésimo", 90: "nonagésimo",
 }
 
+ORDINAL_HUNDREDS_PT = {
+    100: "centésimo", 200: "ducentésimo", 300: "trecentésimo",
+    400: "quadringentésimo", 500: "quingentésimo", 600: "sexcentésimo",
+    700: "setingentésimo", 800: "octingentésimo", 900: "noningentésimo",
+}
+
 
 class Text:
     def __init__(self):
@@ -48,18 +54,25 @@ class Text:
         return total
 
     def _int_to_ordinal_pt(self, number: int) -> str | None:
-        if number <= 0 or number >= 100:
+        if number <= 0 or number >= 1000:
             return None
         if number < 10:
             return ORDINAL_UNITS_PT[number]
+        if number < 100:
+            tens, units = divmod(number, 10)
+            tens_word = ORDINAL_TENS_PT.get(tens * 10)
+            if tens_word is None:
+                return None
+            return tens_word if units == 0 else f"{tens_word} {ORDINAL_UNITS_PT[units]}"
 
-        tens, units = divmod(number, 10)
-        tens_word = ORDINAL_TENS_PT.get(tens * 10)
-        if tens_word is None:
+        hundreds, remainder = divmod(number, 100)
+        hundreds_word = ORDINAL_HUNDREDS_PT.get(hundreds * 100)
+        if hundreds_word is None:
             return None
-        if units == 0:
-            return tens_word
-        return f"{tens_word} {ORDINAL_UNITS_PT[units]}"
+        if remainder == 0:
+            return hundreds_word
+        rest = self._int_to_ordinal_pt(remainder)
+        return f"{hundreds_word} {rest}" if rest else hundreds_word
 
     def _roman_to_ordinal_word(self, roman: str) -> str | None:
         value = self._roman_to_int(roman)
@@ -77,6 +90,16 @@ class Text:
         indent, roman, suffix = match.group(1), match.group(2), match.group(3)
         ordinal = self._roman_to_ordinal_word(roman)
         return f"{indent}{ordinal}{suffix}" if ordinal else match.group(0)
+
+    def _replace_inline_incisos(self, match):
+        keyword = match.group(1)
+        body = match.group(2)
+        converted = re.sub(
+            r'[IVXLCDM]+',
+            lambda m: self._roman_to_ordinal_word(m.group(0)) or m.group(0),
+            body,
+        )
+        return f"{keyword} {converted}"
 
     def expand_legal_terms(self, text: str) -> str:
 
@@ -106,16 +129,25 @@ class Text:
         heading_roman_pattern = r'(?i)\b(TÍTULO|SEÇÃO|LIVRO|PARTE)\s+([IVXLCDM]+)\b'
         expanded_text = re.sub(heading_roman_pattern, self._replace_heading_roman, expanded_text)
 
-        # Roman-numeral inciso markers (e.g. "I - ...", "II - ...", "III) ...") are read
-        # aloud as part of the article's body, so spell them out as ordinal words instead
-        # of letting the TTS engine sound out the letters ("í", "vê"...).
-        inciso_roman_pattern = r'(?m)^(\s*)([IVXLCDM]+)(\s*[-–—)])'
+        # Mid-sentence cross-references ("inciso IV", "incisos I, II e III", "incisos
+        # II a V"). Anchored to the word "inciso(s)" so it can never misfire on other
+        # all-caps letter runs elsewhere in the text — it only looks right after that
+        # keyword, not for roman numerals anywhere in the document.
+        inline_inciso_pattern = r'\b([Ii]ncisos?)\s+((?:[IVXLCDM]+\b(?:\s*(?:,|e|a|à)\s+)?)+)'
+        expanded_text = re.sub(inline_inciso_pattern, self._replace_inline_incisos, expanded_text)
+
+        # Roman-numeral inciso markers (e.g. "I - ...", "II - ...", "III) ...", "IV.")
+        # are read aloud as part of the article's body, so spell them out as ordinal
+        # words instead of letting the TTS engine sound out the letters ("í", "vê"...).
+        inciso_roman_pattern = r'(?m)^(\s*)([IVXLCDM]+)(\s*[-–—).])'
         expanded_text = re.sub(inciso_roman_pattern, self._replace_inciso_roman, expanded_text)
 
         return expanded_text
 
     def remove_markdown_artifacts(self, text: str) -> str:
         patterns = [
+            (r'(?m)^\s*[-*+•]\s+', ''),
+            (r'(?m)^#{1,6}\s*', ''),
             (r'\[([^\]]+)\]\([^\)]+\)', r'\1'),
             (r'[*_>{}]', '')
         ]
@@ -126,25 +158,49 @@ class Text:
 
         return clean.strip()
 
-    def split_text_by_chapters(self, original_text: str) -> dict:
-        chapter_regex_pattern = r"(CAPÍTULO\s+[IVXLCDM]+)"
-        
+    def split_text_by_chapters(self, original_text: str) -> list[tuple[str | None, str]]:
+        # Case-insensitive so "Capítulo IV" / "CAPITULO IV" (extraction can vary in
+        # casing/accents) still splits correctly, and the optional "-A" suffix covers
+        # amendment-inserted chapters like "CAPÍTULO II-A".
+        chapter_regex_pattern = r"(?i)(CAPÍTULO\s+[IVXLCDM]+(?:-[A-Z])?)"
+
         partes = re.split(chapter_regex_pattern, original_text)
 
         if len(partes) < 3:
-            return {}
+            return []
 
-        chapters = {}
+        chapters: list[tuple[str | None, str]] = []
+
+        preamble = partes[0].strip()
+        if preamble:
+            chapters.append((None, preamble))
 
         for i in range(1, len(partes), 2):
             if i + 1 >= len(partes):
                 break
-            chapter_name = partes[i].strip()       
-            chapter_content = partes[i+1].strip()             
-            
-            chapters[chapter_name] = chapter_content
+            chapter_name = partes[i].strip().upper()
+            chapter_content = partes[i + 1].strip()
+
+            # Returning a list (not a dict) is deliberate: chapter numbering almost
+            # always restarts inside each TÍTULO in Brazilian legislation, so a dict
+            # keyed by chapter name would silently overwrite earlier chapters that
+            # share a number with a later one.
+            chapters.append((chapter_name, chapter_content))
 
         return chapters
+
+    def expand_chapter_headings_for_speech(self, text: str) -> str:
+        """Convert "CAPÍTULO <roman>" headings to speakable ordinal words.
+
+        Only call this on text that will NOT subsequently be passed to
+        split_text_by_chapters() — it destroys the literal marker that function
+        depends on to split. Meant for the chunk_text() fallback path, where no
+        chapter structure was detected, so the heading (if present at all) is
+        never stripped out as a segment title and would otherwise be spoken
+        letter-by-letter.
+        """
+        pattern = r'(?i)\b(CAPÍTULO)\s+([IVXLCDM]+)\b'
+        return re.sub(pattern, self._replace_heading_roman, text)
 
     def chunk_text(self, original_text: str, max_chars: int = 2400) -> list[str]:
         paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n", original_text) if paragraph.strip()]
