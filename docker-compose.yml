@@ -8,6 +8,8 @@ services:
       AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION}
       AZURE_ENDPOINT: ${AZURE_ENDPOINT}
       AZURE_SPEECH_VOICE: ${AZURE_SPEECH_VOICE:-pt-BR-ThalitaMultilingualNeural}
+      AZURE_SPEECH_USE_SSML: ${AZURE_SPEECH_USE_SSML:-false}
+      AZURE_SPEECH_RATE: ${AZURE_SPEECH_RATE}
     volumes:
       - ./storage:/app/storage
     expose:

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Callable
 
 from app.models import DocumentResult, SegmentResult
-from app.services.audio import generate_tts
+from app.services.audio import build_segment_ssml, generate_tts
 from app.services.clean_text import Text
 from app.services.file_converter import FileConverter
 
@@ -47,11 +48,17 @@ class DocumentProcessingPipeline:
         audio_dir = job_dir / "audio"
         audio_dir.mkdir(parents=True, exist_ok=True)
 
+        use_ssml = os.getenv("AZURE_SPEECH_USE_SSML", "false").lower() == "true"
+
         results: list[SegmentResult] = []
         for index, (title, segment_text) in enumerate(segments, start=1):
             label = self._slugify(title or f"segment-{index}")
             audio_file = audio_dir / f"{index:02d}-{label}.mp3"
-            generate_tts(segment_text, output_path=str(audio_file), use_ssml=False)
+            if use_ssml:
+                ssml_doc = build_segment_ssml(segment_text, cleaner=self.cleaner)
+                generate_tts(ssml_doc, output_path=str(audio_file), use_ssml=True)
+            else:
+                generate_tts(segment_text, output_path=str(audio_file), use_ssml=False)
             segment = SegmentResult(
                 title=title,
                 text=segment_text,

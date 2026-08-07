@@ -224,15 +224,30 @@ class Text:
 
         return chunks
     
-    def add_ssml_tags(self, text: str) -> str:
-        text = re.sub(r'^#{3}\s*(.+)$', r"<emphasis level='reduced'>\1</emphasis>", text, flags=re.MULTILINE)
-        text = re.sub(r'^#{2}\s*(.+)$', r"<emphasis level='moderate'>\1</emphasis>", text, flags=re.MULTILINE)
-        text = re.sub(r'^#{1}\s*(.+)$', r"<emphasis level='strong'>\1</emphasis>", text, flags=re.MULTILINE)
+    def insert_speech_breaks(self, escaped_text: str, break_ms: int = 400) -> str:
+        """Insert SSML <break> tags at legal-structure boundaries.
 
-        text = re.sub(r'---', "<break time='700ms'/>", text)
+        Must run on text that has ALREADY been XML-escaped, and must never be
+        followed by another escaping pass — escaping after this would turn the
+        <break> tags themselves into literal text that gets read aloud.
 
-        return text
-
+        Keys off legal-structure markers (§, "Parágrafo único", CAPÍTULO/TÍTULO/
+        SEÇÃO headings) that expand_legal_terms() already recognizes reliably from
+        the plain text itself, rather than markdown headers — markdown fidelity
+        through PDF extraction isn't guaranteed, and remove_markdown_artifacts()
+        strips headers out earlier in clean() anyway, so nothing markdown-shaped
+        survives to this point.
+        """
+        break_tag = f"<break time='{break_ms}ms'/>"
+        patterns = [
+            r'(?m)^(§+\s*\S+)',
+            r'(?m)^(Par[aá]grafo\s+[uú]nico)',
+            r'(?i)\b(CAP[IÍ]TULO|T[IÍ]TULO|SE[CÇ][ÃA]O)\s+[IVXLCDM]+\b',
+        ]
+        result = escaped_text
+        for pattern in patterns:
+            result = re.sub(pattern, break_tag + r'\g<0>', result)
+        return result
 
     def clean(self, text: str) -> str:
         text = self.remove_markdown_artifacts(text)
